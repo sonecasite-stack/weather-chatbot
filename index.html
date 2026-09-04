@@ -1,182 +1,299 @@
-const chatWindow = document.getElementById('chat-window');
-const textInput = document.getElementById('text-input');
-const sendBtn = document.getElementById('send-btn');
-const micBtn = document.getElementById('mic-btn');
-
-// Base de respostas locais
-const weatherResponses = {
-    greeting: [
-        "Hello! Let's talk about the weather. How is the weather today?",
-        "Hi there! Beautiful day to chat. How's the weather where you are?"
-    ],
-    sunny: [
-        "That's great! Don't forget your sunglasses and sunscreen.",
-        "I love sunny days! It's perfect for a walk in the park."
-    ],
-    rainy: [
-        "Oh, make sure to take an umbrella if you go out.",
-        "Rainy days are perfect for staying inside with a hot cup of tea."
-    ],
-    cloudy: [
-        "A bit gloomy, isn't it? I hope the sun comes out later.",
-        "Cloudy days can be nice and cool, at least it's not pouring rain."
-    ],
-    cold: [
-        "Brrr! Stay warm and wear a thick jacket or a coat.",
-        "Winter vibes! Time for hot chocolate and cozy blankets."
-    ],
-    hot: [
-        "Wow, stay hydrated! Drink plenty of water today.",
-        "It sounds like a perfect day to eat some ice cream or go to the pool."
-    ],
-    default: [
-        "Interesting! Weather can be very unpredictable. Do you prefer hot or cold weather?",
-        "Tell me more, is it windy, rainy, or warm right now?"
-    ]
-};
-
-// Configuração de Reconhecimento de Voz (Otimizado para Mobile)
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-let isRecording = false;
-
-if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    // O segredo para mobile: processar apenas o resultado final para evitar quebras de ligação
-    recognition.interimResults = false; 
-
-    recognition.onstart = () => {
-        micBtn.classList.add('recording');
-        micBtn.innerText = "🛑"; // Muda o ícone visualmente para indicar que pode parar
-        isRecording = true;
-    };
-
-    recognition.onend = () => {
-        micBtn.classList.remove('recording');
-        micBtn.innerText = "🎤";
-        isRecording = false;
-    };
-
-    recognition.onresult = (event) => {
-        if (event.results && event.results[0]) {
-            const speechToText = event.results[0][0].transcript;
-            textInput.value = speechToText;
-            handleUserMessage(speechToText);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Weather Chatbot - Practice English</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
-    };
 
-    recognition.onerror = (event) => {
-        console.error("Speech recognition error", event.error);
-        if (event.error === 'not-allowed') {
-            alert("Permission denied. Please allow microphone access in your browser settings and ensure you are using HTTPS.");
+        body {
+            background-color: #e5ddd5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            height: -webkit-fill-available;
+            overflow: hidden;
         }
-        micBtn.classList.remove('recording');
-        micBtn.innerText = "🎤";
-        isRecording = false;
-    };
-} else {
-    micBtn.style.display = 'none';
-    alert("Your mobile browser does not support Speech Recognition. Try Google Chrome or Safari.");
-}
 
-// Configuração de Síntese de Voz (Saída)
-function speak(text) {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
+        #chat-container {
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            background-color: #efeae2;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            background-color: #075e54;
+            color: white;
+            padding: 16px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 10;
+            position: relative;
+        }
+
+        header span {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: normal;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        #clear-btn {
+            position: absolute;
+            right: 16px;
+            top: 22px;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 0.8rem;
+            text-decoration: underline;
+            opacity: 0.9;
+        }
+
+        #chat-window {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bot {
+            background-color: white;
+            align-self: flex-start;
+            border-top-left-radius: 0;
+            color: #303030;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+        }
+
+        .user {
+            background-color: #d9fdd3;
+            align-self: flex-end;
+            border-top-right-radius: 0;
+            color: #111b21;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+        }
+
+        #input-container {
+            background-color: #f0f2f5;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-top: 1px solid #e1e1e1;
+        }
+
+        #text-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ffffff;
+            border-radius: 24px;
+            outline: none;
+            font-size: 1rem;
+            background-color: #ffffff;
+        }
+
+        #text-input:focus {
+            border-color: #075e54;
+        }
+
+        .btn {
+            background-color: #075e54;
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        #mic-btn.recording {
+            background-color: #ea4335;
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 67, 53, 0.5); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(234, 67, 53, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 67, 53, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container">
+        <header>
+            Weather Chatbot
+            <span>Practice your English about the weather!</span>
+            <button id="clear-btn">Clear</button>
+        </header>
         
-        const voices = window.speechSynthesis.getVoices();
-        const enVoice = voices.find(voice => voice.lang.startsWith('en-'));
-        if (enVoice) utterance.voice = enVoice;
+        <div id="chat-window"></div>
 
-        window.speechSynthesis.speak(utterance);
-    }
-}
+        <div id="input-container">
+            <button id="mic-btn" class="btn" title="Record Voice">🎤</button>
+            <input type="text" id="text-input" placeholder="Type a message..." autocomplete="off">
+            <button id="send-btn" class="btn" title="Send Message">➤</button>
+        </div>
+    </div>
 
-// Lógica do Chatbot
-function appendMessage(sender, text) {
-    const messageDiv = document.createElement('div');
-    messageDiv.classList.add('message', sender);
-    messageDiv.innerText = text;
-    chatWindow.appendChild(messageDiv);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-}
+    <script>
+        const chatWindow = document.getElementById('chat-window');
+        const textInput = document.getElementById('text-input');
+        const sendBtn = document.getElementById('send-btn');
+        const micBtn = document.getElementById('mic-btn');
+        const clearBtn = document.getElementById('clear-btn');
 
-function getBotResponse(input) {
-    const text = input.toLowerCase();
-    
-    if (text.includes('hello') || text.includes('hi') || text.includes('hey')) {
-        return getRandomResponse('greeting');
-    } else if (text.includes('sun') || text.includes('sunny') || text.includes('clear')) {
-        return getRandomResponse('sunny');
-    } else if (text.includes('rain') || text.includes('rainy') || text.includes('wet')) {
-        return getRandomResponse('rainy');
-    } else if (text.includes('cloud') || text.includes('cloudy') || text.includes('grey')) {
-        return getRandomResponse('cloudy');
-    } else if (text.includes('cold') || text.includes('freezing') || text.includes('snow')) {
-        return getRandomResponse('cold');
-    } else if (text.includes('hot') || text.includes('warm') || text.includes('boiling')) {
-        return getRandomResponse('hot');
-    } else {
-        return getRandomResponse('default');
-    }
-}
+        const botResponses = {
+            greetings: [
+                "Hello! How is the weather near you today?",
+                "Hi there! Let's talk about the weather. Is it nice outside?"
+            ],
+            sunny: [
+                "I love sunny days! It is perfect for a walk in the park. Don't forget your sunglasses!",
+                "Sunlight is amazing! Is it very hot or just warm and pleasant?"
+            ],
+            rainy: [
+                "Oh, rainy days are cozy. Remember to take an umbrella if you go out!",
+                "Rain is good for the plants! Do you prefer staying indoors when it rains?"
+            ],
+            cloudy: [
+                "Cloudy days can be a bit gray, but they are great for outdoor sports. Do you think it will rain?",
+                "It sounds like a calm day. Is it windy as well or just cloudy?"
+            ],
+            cold: [
+                "Brr! Make sure to wear a warm jacket or a coat. Do you enjoy cold winter days?",
+                "Cold weather is perfect for hot chocolate! Is it freezing or just a bit chilly?"
+            ],
+            hot: [
+                "Whew! It sounds burning hot. Stay hydrated and drink plenty of water!",
+                "Summer vibes! Is it humid or a dry heat over there?"
+            ],
+            fallback: [
+                "Interesting! Tell me more, is it sunny, rainy, cold, or hot right now?",
+                "I see! And how does that affect the weather today? Tell me if it is sunny or cloudy!",
+                "Weather changes fast! Is it hot or cold outside your window at the moment?"
+            ]
+        };
 
-function getRandomResponse(category) {
-    const responses = weatherResponses[category];
-    const index = Math.floor(Math.random() * responses.length);
-    return responses[index];
-}
+        let history = JSON.parse(localStorage.getItem('weather_chat_history')) || [];
 
-function handleUserMessage(message) {
-    if (!message.trim()) return;
-    
-    appendMessage('user', message);
-    textInput.value = '';
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isRecording = false;
 
-    setTimeout(() => {
-        const botResponse = getBotResponse(message);
-        appendMessage('bot', botResponse);
-        speak(botResponse);
-    }, 600);
-}
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
 
-// Event Listeners (Usa 'click' que é universalmente aceito após interação do utilizador)
-sendBtn.addEventListener('click', () => {
-    handleUserMessage(textInput.value);
-});
+            recognition.onstart = function() {
+                isRecording = true;
+                micBtn.classList.add('recording');
+                micBtn.innerHTML = '🛑';
+            };
 
-textInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        handleUserMessage(textInput.value);
-    }
-});
+            recognition.onend = function() {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '🎤';
+            };
 
-micBtn.addEventListener('click', (e) => {
-    e.preventDefault(); // Evita comportamentos estranhos de foco em mobile
-    if (!recognition) return;
-    
-    // Ativa o áudio do navegador (necessário no iOS antes de falar)
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            recognition.onerror = function() {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '🎤';
+            };
 
-    if (isRecording) {
-        recognition.stop();
-    } else {
-        try {
-            recognition.start();
-        } catch (err) {
-            console.log("Recognition already started or error: ", err);
+            recognition.onresult = function(event) {
+                if (event.results && event.results[0] && event.results[0][0]) {
+                    const speechToText = event.results[0][0].transcript;
+                    if (speechToText && speechToText.trim() !== "") {
+                        addMessage(speechToText, 'user');
+                        saveToHistory(speechToText, 'user');
+                        processBotResponse(speechToText);
+                    }
+                }
+            };
         }
-    }
-});
 
-// Mensagem inicial
-window.addEventListener('load', () => {
-    setTimeout(() => {
-        const welcome = "Hello! I am your offline weather assistant. How is the weather today?";
-        appendMessage('bot', welcome);
-    }, 500);
-});
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', sender);
+            msgDiv.textContent = text;
+            chatWindow.appendChild(msgDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function saveToHistory(text, sender) {
+            history.push({ text: text, sender: sender });
+            localStorage.setItem('weather_chat_history', JSON.stringify(history));
+        }
+
+        function loadHistory() {
+            chatWindow.innerHTML = '';
+            if (history.length > 0) {
+                history.forEach(function(msg) {
+                    addMessage(msg.text, msg.sender);
+                });
+            } else {
+                const welcome = "Hello! I am your weather assistant. How is the weather today? Is it sunny, rainy, or cold?";
+                addMessage(welcome, 'bot');
+                saveToHistory(welcome, 'bot');
+            }
+        }
+
