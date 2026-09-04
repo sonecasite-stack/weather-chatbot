@@ -1,0 +1,182 @@
+const chatWindow = document.getElementById('chat-window');
+const textInput = document.getElementById('text-input');
+const sendBtn = document.getElementById('send-btn');
+const micBtn = document.getElementById('mic-btn');
+
+// Base de respostas locais
+const weatherResponses = {
+    greeting: [
+        "Hello! Let's talk about the weather. How is the weather today?",
+        "Hi there! Beautiful day to chat. How's the weather where you are?"
+    ],
+    sunny: [
+        "That's great! Don't forget your sunglasses and sunscreen.",
+        "I love sunny days! It's perfect for a walk in the park."
+    ],
+    rainy: [
+        "Oh, make sure to take an umbrella if you go out.",
+        "Rainy days are perfect for staying inside with a hot cup of tea."
+    ],
+    cloudy: [
+        "A bit gloomy, isn't it? I hope the sun comes out later.",
+        "Cloudy days can be nice and cool, at least it's not pouring rain."
+    ],
+    cold: [
+        "Brrr! Stay warm and wear a thick jacket or a coat.",
+        "Winter vibes! Time for hot chocolate and cozy blankets."
+    ],
+    hot: [
+        "Wow, stay hydrated! Drink plenty of water today.",
+        "It sounds like a perfect day to eat some ice cream or go to the pool."
+    ],
+    default: [
+        "Interesting! Weather can be very unpredictable. Do you prefer hot or cold weather?",
+        "Tell me more, is it windy, rainy, or warm right now?"
+    ]
+};
+
+// Configuração de Reconhecimento de Voz (Otimizado para Mobile)
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isRecording = false;
+
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    // O segredo para mobile: processar apenas o resultado final para evitar quebras de ligação
+    recognition.interimResults = false; 
+
+    recognition.onstart = () => {
+        micBtn.classList.add('recording');
+        micBtn.innerText = "🛑"; // Muda o ícone visualmente para indicar que pode parar
+        isRecording = true;
+    };
+
+    recognition.onend = () => {
+        micBtn.classList.remove('recording');
+        micBtn.innerText = "🎤";
+        isRecording = false;
+    };
+
+    recognition.onresult = (event) => {
+        if (event.results && event.results[0]) {
+            const speechToText = event.results[0][0].transcript;
+            textInput.value = speechToText;
+            handleUserMessage(speechToText);
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        if (event.error === 'not-allowed') {
+            alert("Permission denied. Please allow microphone access in your browser settings and ensure you are using HTTPS.");
+        }
+        micBtn.classList.remove('recording');
+        micBtn.innerText = "🎤";
+        isRecording = false;
+    };
+} else {
+    micBtn.style.display = 'none';
+    alert("Your mobile browser does not support Speech Recognition. Try Google Chrome or Safari.");
+}
+
+// Configuração de Síntese de Voz (Saída)
+function speak(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        
+        const voices = window.speechSynthesis.getVoices();
+        const enVoice = voices.find(voice => voice.lang.startsWith('en-'));
+        if (enVoice) utterance.voice = enVoice;
+
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+// Lógica do Chatbot
+function appendMessage(sender, text) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', sender);
+    messageDiv.innerText = text;
+    chatWindow.appendChild(messageDiv);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function getBotResponse(input) {
+    const text = input.toLowerCase();
+    
+    if (text.includes('hello') || text.includes('hi') || text.includes('hey')) {
+        return getRandomResponse('greeting');
+    } else if (text.includes('sun') || text.includes('sunny') || text.includes('clear')) {
+        return getRandomResponse('sunny');
+    } else if (text.includes('rain') || text.includes('rainy') || text.includes('wet')) {
+        return getRandomResponse('rainy');
+    } else if (text.includes('cloud') || text.includes('cloudy') || text.includes('grey')) {
+        return getRandomResponse('cloudy');
+    } else if (text.includes('cold') || text.includes('freezing') || text.includes('snow')) {
+        return getRandomResponse('cold');
+    } else if (text.includes('hot') || text.includes('warm') || text.includes('boiling')) {
+        return getRandomResponse('hot');
+    } else {
+        return getRandomResponse('default');
+    }
+}
+
+function getRandomResponse(category) {
+    const responses = weatherResponses[category];
+    const index = Math.floor(Math.random() * responses.length);
+    return responses[index];
+}
+
+function handleUserMessage(message) {
+    if (!message.trim()) return;
+    
+    appendMessage('user', message);
+    textInput.value = '';
+
+    setTimeout(() => {
+        const botResponse = getBotResponse(message);
+        appendMessage('bot', botResponse);
+        speak(botResponse);
+    }, 600);
+}
+
+// Event Listeners (Usa 'click' que é universalmente aceito após interação do utilizador)
+sendBtn.addEventListener('click', () => {
+    handleUserMessage(textInput.value);
+});
+
+textInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        handleUserMessage(textInput.value);
+    }
+});
+
+micBtn.addEventListener('click', (e) => {
+    e.preventDefault(); // Evita comportamentos estranhos de foco em mobile
+    if (!recognition) return;
+    
+    // Ativa o áudio do navegador (necessário no iOS antes de falar)
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+
+    if (isRecording) {
+        recognition.stop();
+    } else {
+        try {
+            recognition.start();
+        } catch (err) {
+            console.log("Recognition already started or error: ", err);
+        }
+    }
+});
+
+// Mensagem inicial
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        const welcome = "Hello! I am your offline weather assistant. How is the weather today?";
+        appendMessage('bot', welcome);
+    }, 500);
+});
